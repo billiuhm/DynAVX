@@ -1,265 +1,652 @@
-#ifndef SIMD_C
-#define SIMD_C
-
+#include <vector>
+#include <cstddef>
 #include <immintrin.h>
-#include <cmath>
+#include <iostream>
+
+// Add `-msse -msse2 -msse3 -mssse3 -msse4 -msse4 -mavx512f` to compile command
 
 class simd {
+    int avx_ver = 0; // 0: scalar, 1: SSE2/SSE4.x, 2: AVX2, 3: AVX-512
+
 public:
-    int avx_ver = 0;
-
-    simd() {
-        #ifdef __AVX2__
-        
-        #endif
+    simd() noexcept {
+        detect_features();
     }
+
+    void detect_features() noexcept {
+    #if defined(__GNUC__) || defined(__clang__)
+        __builtin_cpu_init();
+
+        if (__builtin_cpu_supports("avx512f")) {
+            avx_ver = 3;
+        } else if (__builtin_cpu_supports("avx2")) {
+            avx_ver = 2;
+        } else if (__builtin_cpu_supports("avx")) {
+            avx_ver = 1; // treat plain AVX as SSE2-level for our simple ops
+        } else if (__builtin_cpu_supports("sse") || __builtin_cpu_supports("sse2") || __builtin_cpu_supports("sse3") || __builtin_cpu_supports("sse4.1") || __builtin_cpu_supports("sse4.2")) {
+            avx_ver = 1;
+        } else {
+            avx_ver = 0;
+        }
+    #else
+        // For non-GCC/Clang compilers, you might need different detection logic
+        avx_ver = 0; // default to scalar
+    #endif
+    }
+
+    //==================== INT ADD ====================//
+    void addi(std::vector<int>& a, std::vector<int>& b, std::vector<int>& out) const noexcept {
+        size_t size = a.size();
+        if (b.size() != size || out.size() != size) return;
+
+        switch (avx_ver) {
+            case 3: addi_avx512(a, b, out); break;
+            case 2: addi_avx2(a, b, out); break;
+            case 1: addi_sse2(a, b, out); break;
+            default: addi_scalar(a, b, out); break;
+        }
+    }
+
+    static void addi_scalar(const std::vector<int>& a, const std::vector<int>& b, std::vector<int>& out) noexcept {
+        for (size_t i = 0; i < a.size(); ++i)
+            out[i] = a[i] + b[i];
+    }
+
+    static void addi_sse2(const std::vector<int>& a, const std::vector<int>& b, std::vector<int>& out) noexcept {
+        const size_t step = 4;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m128i va = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&a[i]));
+            __m128i vb = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&b[i]));
+            __m128i vc = _mm_add_epi32(va, vb);
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(&out[i]), vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] + b[i];
+    }
+
+    static void addi_avx2(const std::vector<int>& a, const std::vector<int>& b, std::vector<int>& out) noexcept {
+        const size_t step = 8;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m256i va = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&a[i]));
+            __m256i vb = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&b[i]));
+            __m256i vc = _mm256_add_epi32(va, vb);
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(&out[i]), vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] + b[i];
+    }
+
+    static void addi_avx512(const std::vector<int>& a, const std::vector<int>& b, std::vector<int>& out) noexcept {
+        const size_t step = 16;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m512i va = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(&a[i]));
+            __m512i vb = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(&b[i]));
+            __m512i vc = _mm512_add_epi32(va, vb);
+            _mm512_storeu_si512(reinterpret_cast<__m512i*>(&out[i]), vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] + b[i];
+    }
+
+    //==================== INT SUB ====================//
+    void subi(std::vector<int>& a, std::vector<int>& b, std::vector<int>& out) const noexcept {
+        size_t size = a.size();
+        if (b.size() != size || out.size() != size) return;
+
+        switch (avx_ver) {
+            case 3: subi_avx512(a, b, out); break;
+            case 2: subi_avx2(a, b, out); break;
+            case 1: subi_sse2(a, b, out); break;
+            default: subi_scalar(a, b, out); break;
+        }
+    }
+
+    static void subi_scalar(const std::vector<int>& a, const std::vector<int>& b, std::vector<int>& out) noexcept {
+        for (size_t i = 0; i < a.size(); ++i)
+            out[i] = a[i] - b[i];
+    }
+
+    static void subi_sse2(const std::vector<int>& a, const std::vector<int>& b, std::vector<int>& out) noexcept {
+        const size_t step = 4;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m128i va = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&a[i]));
+            __m128i vb = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&b[i]));
+            __m128i vc = _mm_sub_epi32(va, vb);
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(&out[i]), vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] - b[i];
+    }
+
+    static void subi_avx2(const std::vector<int>& a, const std::vector<int>& b, std::vector<int>& out) noexcept {
+        const size_t step = 8;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m256i va = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&a[i]));
+            __m256i vb = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&b[i]));
+            __m256i vc = _mm256_sub_epi32(va, vb);
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(&out[i]), vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] - b[i];
+    }
+
+    static void subi_avx512(const std::vector<int>& a, const std::vector<int>& b, std::vector<int>& out) noexcept {
+        const size_t step = 16;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m512i va = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(&a[i]));
+            __m512i vb = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(&b[i]));
+            __m512i vc = _mm512_sub_epi32(va, vb);
+            _mm512_storeu_si512(reinterpret_cast<__m512i*>(&out[i]), vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] - b[i];
+    }
+
+    //==================== INT MUL ====================//
+    void muli(std::vector<int>& a, std::vector<int>& b, std::vector<int>& out) const noexcept {
+        size_t size = a.size();
+        if (b.size() != size || out.size() != size) return;
+
+        switch (avx_ver) {
+            case 3: muli_avx512(a, b, out); break;
+            case 2: muli_avx2(a, b, out); break;
+            case 1: muli_sse(a, b, out); break;
+            default: muli_scalar(a, b, out); break;
+        }
+    }
+
+    static void muli_scalar(const std::vector<int>& a, const std::vector<int>& b, std::vector<int>& out) noexcept {
+        for (size_t i = 0; i < a.size(); ++i)
+            out[i] = a[i] * b[i];
+    }
+
+    static void muli_sse(const std::vector<int>& a, const std::vector<int>& b, std::vector<int>& out) noexcept {
+        // uses _mm_mullo_epi32 (SSE4.1); your compile flags mention sse4.1
+        const size_t step = 4;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m128i va = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&a[i]));
+            __m128i vb = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&b[i]));
+            __m128i vc = _mm_mullo_epi32(va, vb);
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(&out[i]), vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] * b[i];
+    }
+
+    static void muli_avx2(const std::vector<int>& a, const std::vector<int>& b, std::vector<int>& out) noexcept {
+        const size_t step = 8;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m256i va = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&a[i]));
+            __m256i vb = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&b[i]));
+            __m256i vc = _mm256_mullo_epi32(va, vb);
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(&out[i]), vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] * b[i];
+    }
+
+    static void muli_avx512(const std::vector<int>& a, const std::vector<int>& b, std::vector<int>& out) noexcept {
+        const size_t step = 16;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m512i va = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(&a[i]));
+            __m512i vb = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(&b[i]));
+            __m512i vc = _mm512_mullo_epi32(va, vb);
+            _mm512_storeu_si512(reinterpret_cast<__m512i*>(&out[i]), vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] * b[i];
+    }
+
+    //==================== INT DIV ====================//
+    void divi(std::vector<int>& a, std::vector<int>& b, std::vector<int>& out) const noexcept {
+        size_t size = a.size();
+        if (b.size() != size || out.size() != size) return;
+
+        // There is no standard SIMD integer divide intrinsic for 32-bit integers in SSE/AVX.
+        // We therefore use scalar division to preserve exact integer semantics (truncation toward zero).
+        divi_scalar(a, b, out);
+    }
+
+    static void divi_scalar(const std::vector<int>& a, const std::vector<int>& b, std::vector<int>& out) noexcept {
+        for (size_t i = 0; i < a.size(); ++i) {
+            // avoid division by zero UB; mirror normal integer behavior (implementation-defined)
+            // Here we simply perform the division; caller should ensure b[i] != 0 if needed.
+            out[i] = a[i] / b[i];
+        }
+    }
+
+    //==================== FLOAT ADD ====================//
+    void addf(std::vector<float>& a, std::vector<float>& b, std::vector<float>& out) const noexcept {
+        size_t size = a.size();
+        if (b.size() != size || out.size() != size) return;
+
+        switch (avx_ver) {
+            case 3: addf_avx512(a, b, out); break;
+            case 2: addf_avx2(a, b, out); break;
+            case 1: addf_sse(a, b, out); break;
+            default: addf_scalar(a, b, out); break;
+        }
+    }
+
+    static void addf_scalar(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& out) noexcept {
+        for (size_t i = 0; i < a.size(); ++i)
+            out[i] = a[i] + b[i];
+    }
+
+    static void addf_sse(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& out) noexcept {
+        const size_t step = 4;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m128 va = _mm_loadu_ps(&a[i]);
+            __m128 vb = _mm_loadu_ps(&b[i]);
+            __m128 vc = _mm_add_ps(va, vb);
+            _mm_storeu_ps(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] + b[i];
+    }
+
+    static void addf_avx2(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& out) noexcept {
+        const size_t step = 8;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m256 va = _mm256_loadu_ps(&a[i]);
+            __m256 vb = _mm256_loadu_ps(&b[i]);
+            __m256 vc = _mm256_add_ps(va, vb);
+            _mm256_storeu_ps(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] + b[i];
+    }
+
+    static void addf_avx512(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& out) noexcept {
+        const size_t step = 16;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m512 va = _mm512_loadu_ps(&a[i]);
+            __m512 vb = _mm512_loadu_ps(&b[i]);
+            __m512 vc = _mm512_add_ps(va, vb);
+            _mm512_storeu_ps(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] + b[i];
+    }
+
+    //==================== FLOAT SUB ====================//
+    void subf(std::vector<float>& a, std::vector<float>& b, std::vector<float>& out) const noexcept {
+        size_t size = a.size();
+        if (b.size() != size || out.size() != size) return;
+
+        switch (avx_ver) {
+            case 3: subf_avx512(a, b, out); break;
+            case 2: subf_avx2(a, b, out); break;
+            case 1: subf_sse(a, b, out); break;
+            default: subf_scalar(a, b, out); break;
+        }
+    }
+
+    static void subf_scalar(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& out) noexcept {
+        for (size_t i = 0; i < a.size(); ++i)
+            out[i] = a[i] - b[i];
+    }
+
+    static void subf_sse(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& out) noexcept {
+        const size_t step = 4;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m128 va = _mm_loadu_ps(&a[i]);
+            __m128 vb = _mm_loadu_ps(&b[i]);
+            __m128 vc = _mm_sub_ps(va, vb);
+            _mm_storeu_ps(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] - b[i];
+    }
+
+    static void subf_avx2(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& out) noexcept {
+        const size_t step = 8;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m256 va = _mm256_loadu_ps(&a[i]);
+            __m256 vb = _mm256_loadu_ps(&b[i]);
+            __m256 vc = _mm256_sub_ps(va, vb);
+            _mm256_storeu_ps(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] - b[i];
+    }
+
+    static void subf_avx512(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& out) noexcept {
+        const size_t step = 16;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m512 va = _mm512_loadu_ps(&a[i]);
+            __m512 vb = _mm512_loadu_ps(&b[i]);
+            __m512 vc = _mm512_sub_ps(va, vb);
+            _mm512_storeu_ps(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] - b[i];
+    }
+
+    //==================== FLOAT MUL ====================//
+    void mulf(std::vector<float>& a, std::vector<float>& b, std::vector<float>& out) const noexcept {
+        size_t size = a.size();
+        if (b.size() != size || out.size() != size) return;
+
+        switch (avx_ver) {
+            case 3: mulf_avx512(a, b, out); break;
+            case 2: mulf_avx2(a, b, out); break;
+            case 1: mulf_sse(a, b, out); break;
+            default: mulf_scalar(a, b, out); break;
+        }
+    }
+
+    static void mulf_scalar(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& out) noexcept {
+        for (size_t i = 0; i < a.size(); ++i)
+            out[i] = a[i] * b[i];
+    }
+
+    static void mulf_sse(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& out) noexcept {
+        const size_t step = 4;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m128 va = _mm_loadu_ps(&a[i]);
+            __m128 vb = _mm_loadu_ps(&b[i]);
+            __m128 vc = _mm_mul_ps(va, vb);
+            _mm_storeu_ps(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] * b[i];
+    }
+
+    static void mulf_avx2(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& out) noexcept {
+        const size_t step = 8;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m256 va = _mm256_loadu_ps(&a[i]);
+            __m256 vb = _mm256_loadu_ps(&b[i]);
+            __m256 vc = _mm256_mul_ps(va, vb);
+            _mm256_storeu_ps(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] * b[i];
+    }
+
+    static void mulf_avx512(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& out) noexcept {
+        const size_t step = 16;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m512 va = _mm512_loadu_ps(&a[i]);
+            __m512 vb = _mm512_loadu_ps(&b[i]);
+            __m512 vc = _mm512_mul_ps(va, vb);
+            _mm512_storeu_ps(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] * b[i];
+    }
+
+    //==================== FLOAT DIV ====================//
+    void divf(std::vector<float>& a, std::vector<float>& b, std::vector<float>& out) const noexcept {
+        size_t size = a.size();
+        if (b.size() != size || out.size() != size) return;
+
+        switch (avx_ver) {
+            case 3: divf_avx512(a, b, out); break;
+            case 2: divf_avx2(a, b, out); break;
+            case 1: divf_sse(a, b, out); break;
+            default: divf_scalar(a, b, out); break;
+        }
+    }
+
+    static void divf_scalar(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& out) noexcept {
+        for (size_t i = 0; i < a.size(); ++i)
+            out[i] = a[i] / b[i];
+    }
+
+    static void divf_sse(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& out) noexcept {
+        const size_t step = 4;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m128 va = _mm_loadu_ps(&a[i]);
+            __m128 vb = _mm_loadu_ps(&b[i]);
+            __m128 vc = _mm_div_ps(va, vb);
+            _mm_storeu_ps(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] / b[i];
+    }
+
+    static void divf_avx2(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& out) noexcept {
+        const size_t step = 8;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m256 va = _mm256_loadu_ps(&a[i]);
+            __m256 vb = _mm256_loadu_ps(&b[i]);
+            __m256 vc = _mm256_div_ps(va, vb);
+            _mm256_storeu_ps(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] / b[i];
+    }
+
+    static void divf_avx512(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& out) noexcept {
+        const size_t step = 16;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m512 va = _mm512_loadu_ps(&a[i]);
+            __m512 vb = _mm512_loadu_ps(&b[i]);
+            __m512 vc = _mm512_div_ps(va, vb);
+            _mm512_storeu_ps(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] / b[i];
+    }
+
+    //==================== DOUBLE ADD ====================//
+    void addd(std::vector<double>& a, std::vector<double>& b, std::vector<double>& out) const noexcept {
+        size_t size = a.size();
+        if (b.size() != size || out.size() != size) return;
+
+        switch (avx_ver) {
+            case 3: addd_avx512(a, b, out); break;
+            case 2: addd_avx2(a, b, out); break;
+            case 1: addd_sse2(a, b, out); break;
+            default: addd_scalar(a, b, out); break;
+        }
+    }
+
+    static void addd_scalar(const std::vector<double>& a, const std::vector<double>& b, std::vector<double>& out) noexcept {
+        for (size_t i = 0; i < a.size(); ++i)
+            out[i] = a[i] + b[i];
+    }
+
+    static void addd_sse2(const std::vector<double>& a, const std::vector<double>& b, std::vector<double>& out) noexcept {
+        const size_t step = 2;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m128d va = _mm_loadu_pd(&a[i]);
+            __m128d vb = _mm_loadu_pd(&b[i]);
+            __m128d vc = _mm_add_pd(va, vb);
+            _mm_storeu_pd(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] + b[i];
+    }
+
+    static void addd_avx2(const std::vector<double>& a, const std::vector<double>& b, std::vector<double>& out) noexcept {
+        const size_t step = 4;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m256d va = _mm256_loadu_pd(&a[i]);
+            __m256d vb = _mm256_loadu_pd(&b[i]);
+            __m256d vc = _mm256_add_pd(va, vb);
+            _mm256_storeu_pd(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] + b[i];
+    }
+
+    static void addd_avx512(const std::vector<double>& a, const std::vector<double>& b, std::vector<double>& out) noexcept {
+        const size_t step = 8;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m512d va = _mm512_loadu_pd(&a[i]);
+            __m512d vb = _mm512_loadu_pd(&b[i]);
+            __m512d vc = _mm512_add_pd(va, vb);
+            _mm512_storeu_pd(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] + b[i];
+    }
+
+    //==================== DOUBLE SUB ====================//
+    void subd(std::vector<double>& a, std::vector<double>& b, std::vector<double>& out) const noexcept {
+        size_t size = a.size();
+        if (b.size() != size || out.size() != size) return;
+
+        switch (avx_ver) {
+            case 3: subd_avx512(a, b, out); break;
+            case 2: subd_avx2(a, b, out); break;
+            case 1: subd_sse2(a, b, out); break;
+            default: subd_scalar(a, b, out); break;
+        }
+    }
+
+    static void subd_scalar(const std::vector<double>& a, const std::vector<double>& b, std::vector<double>& out) noexcept {
+        for (size_t i = 0; i < a.size(); ++i)
+            out[i] = a[i] - b[i];
+    }
+
+    static void subd_sse2(const std::vector<double>& a, const std::vector<double>& b, std::vector<double>& out) noexcept {
+        const size_t step = 2;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m128d va = _mm_loadu_pd(&a[i]);
+            __m128d vb = _mm_loadu_pd(&b[i]);
+            __m128d vc = _mm_sub_pd(va, vb);
+            _mm_storeu_pd(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] - b[i];
+    }
+
+    static void subd_avx2(const std::vector<double>& a, const std::vector<double>& b, std::vector<double>& out) noexcept {
+        const size_t step = 4;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m256d va = _mm256_loadu_pd(&a[i]);
+            __m256d vb = _mm256_loadu_pd(&b[i]);
+            __m256d vc = _mm256_sub_pd(va, vb);
+            _mm256_storeu_pd(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] - b[i];
+    }
+
+    static void subd_avx512(const std::vector<double>& a, const std::vector<double>& b, std::vector<double>& out) noexcept {
+        const size_t step = 8;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m512d va = _mm512_loadu_pd(&a[i]);
+            __m512d vb = _mm512_loadu_pd(&b[i]);
+            __m512d vc = _mm512_sub_pd(va, vb);
+            _mm512_storeu_pd(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] - b[i];
+    }
+
+    //==================== DOUBLE MUL ====================//
+    void muld(std::vector<double>& a, std::vector<double>& b, std::vector<double>& out) const noexcept {
+        size_t size = a.size();
+        if (b.size() != size || out.size() != size) return;
+
+        switch (avx_ver) {
+            case 3: muld_avx512(a, b, out); break;
+            case 2: muld_avx2(a, b, out); break;
+            case 1: muld_sse2(a, b, out); break;
+            default: muld_scalar(a, b, out); break;
+        }
+    }
+
+    static void muld_scalar(const std::vector<double>& a, const std::vector<double>& b, std::vector<double>& out) noexcept {
+        for (size_t i = 0; i < a.size(); ++i)
+            out[i] = a[i] * b[i];
+    }
+
+    static void muld_sse2(const std::vector<double>& a, const std::vector<double>& b, std::vector<double>& out) noexcept {
+        const size_t step = 2;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m128d va = _mm_loadu_pd(&a[i]);
+            __m128d vb = _mm_loadu_pd(&b[i]);
+            __m128d vc = _mm_mul_pd(va, vb);
+            _mm_storeu_pd(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] * b[i];
+    }
+
+    static void muld_avx2(const std::vector<double>& a, const std::vector<double>& b, std::vector<double>& out) noexcept {
+        const size_t step = 4;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m256d va = _mm256_loadu_pd(&a[i]);
+            __m256d vb = _mm256_loadu_pd(&b[i]);
+            __m256d vc = _mm256_mul_pd(va, vb);
+            _mm256_storeu_pd(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] * b[i];
+    }
+
+    static void muld_avx512(const std::vector<double>& a, const std::vector<double>& b, std::vector<double>& out) noexcept {
+        const size_t step = 8;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m512d va = _mm512_loadu_pd(&a[i]);
+            __m512d vb = _mm512_loadu_pd(&b[i]);
+            __m512d vc = _mm512_mul_pd(va, vb);
+            _mm512_storeu_pd(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] * b[i];
+    }
+
+    //==================== DOUBLE DIV ====================//
+    void divd(std::vector<double>& a, std::vector<double>& b, std::vector<double>& out) const noexcept {
+        size_t size = a.size();
+        if (b.size() != size || out.size() != size) return;
+
+        switch (avx_ver) {
+            case 3: divd_avx512(a, b, out); break;
+            case 2: divd_avx2(a, b, out); break;
+            case 1: divd_sse2(a, b, out); break;
+            default: divd_scalar(a, b, out); break;
+        }
+    }
+
+    static void divd_scalar(const std::vector<double>& a, const std::vector<double>& b, std::vector<double>& out) noexcept {
+        for (size_t i = 0; i < a.size(); ++i)
+            out[i] = a[i] / b[i];
+    }
+
+    static void divd_sse2(const std::vector<double>& a, const std::vector<double>& b, std::vector<double>& out) noexcept {
+        const size_t step = 2;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m128d va = _mm_loadu_pd(&a[i]);
+            __m128d vb = _mm_loadu_pd(&b[i]);
+            __m128d vc = _mm_div_pd(va, vb);
+            _mm_storeu_pd(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] / b[i];
+    }
+
+    static void divd_avx2(const std::vector<double>& a, const std::vector<double>& b, std::vector<double>& out) noexcept {
+        const size_t step = 4;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m256d va = _mm256_loadu_pd(&a[i]);
+            __m256d vb = _mm256_loadu_pd(&b[i]);
+            __m256d vc = _mm256_div_pd(va, vb);
+            _mm256_storeu_pd(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] / b[i];
+    }
+
+    static void divd_avx512(const std::vector<double>& a, const std::vector<double>& b, std::vector<double>& out) noexcept {
+        const size_t step = 8;
+        size_t i = 0;
+        for (; i + step <= a.size(); i += step) {
+            __m512d va = _mm512_loadu_pd(&a[i]);
+            __m512d vb = _mm512_loadu_pd(&b[i]);
+            __m512d vc = _mm512_div_pd(va, vb);
+            _mm512_storeu_pd(&out[i], vc);
+        }
+        for (; i < a.size(); ++i) out[i] = a[i] / b[i];
+    }
+
+    //==================== META ====================//
+    int version() const noexcept { return avx_ver; }
 };
-
-// ======================== 128-bit (SSE) Versions ========================
-inline void simd_sqrt128(const float* input, float* output, size_t count) {
-    size_t i = 0;
-    for (; i + 3 < count; i += 4) {
-        __m128 vin = _mm_loadu_ps(input + i);
-        __m128 vout = _mm_sqrt_ps(vin);
-        _mm_storeu_ps(output + i, vout);
-    }
-    for (; i < count; ++i) {
-        output[i] = std::sqrt(input[i]);
-    }
-}
-
-inline void simd_divide128(const float* base, const float* divider, float* result, size_t count) {
-    size_t i = 0;
-    for (; i + 3 < count; i += 4) {
-        __m128 va = _mm_loadu_ps(&base[i]);
-        __m128 vb = _mm_loadu_ps(&divider[i]);
-        __m128 vr = _mm_div_ps(va, vb);
-        _mm_storeu_ps(&result[i], vr);
-    }
-    for (; i < count; ++i) {
-        result[i] = base[i] / divider[i];  // Fixed: division instead of multiplication
-    }
-}
-
-inline __m128 log2_approx128(__m128 x) {
-    __m128i xi = _mm_castps_si128(x);
-    __m128 exp = _mm_cvtepi32_ps(_mm_srli_epi32(xi, 23));
-    exp = _mm_sub_ps(exp, _mm_set1_ps(127.0f));
-
-    xi = _mm_and_si128(xi, _mm_set1_epi32(0x007FFFFF));
-    xi = _mm_or_si128(xi, _mm_set1_epi32(0x3f800000));
-    __m128 mant = _mm_castsi128_ps(xi);
-
-    __m128 log_mant = _mm_sub_ps(mant, _mm_set1_ps(1.0f));
-    return _mm_add_ps(exp, log_mant);
-}
-
-inline __m128 exp2_approx128(__m128 x) {
-    __m128i int_part = _mm_cvttps_epi32(x);
-    __m128 frac = _mm_sub_ps(x, _mm_cvtepi32_ps(int_part));
-
-    int_part = _mm_add_epi32(int_part, _mm_set1_epi32(127));
-    int_part = _mm_slli_epi32(int_part, 23);
-    __m128 int_result = _mm_castsi128_ps(int_part);
-
-    __m128 frac_result = _mm_add_ps(_mm_set1_ps(1.0f), 
-                                    _mm_mul_ps(frac, _mm_set1_ps(0.69314718f)));
-    return _mm_mul_ps(int_result, frac_result);
-}
-
-inline void fast_pow_array128(const float* base, const float* exponent, float* out, size_t count) {
-    size_t i = 0;
-    for (; i + 3 < count; i += 4) {
-        __m128 vx = _mm_loadu_ps(base + i);
-        __m128 vy = _mm_loadu_ps(exponent + i);
-        __m128 logx = log2_approx128(vx);
-        __m128 prod = _mm_mul_ps(logx, vy);
-        __m128 result = exp2_approx128(prod);
-        _mm_storeu_ps(out + i, result);
-    }
-    for (; i < count; ++i) {
-        float logx = std::log2(base[i]);
-        out[i] = std::exp2(exponent[i] * logx);
-    }
-}
-
-inline void simd_multiply128(const float* base, const float* scalar, float* result, size_t count) {
-    size_t i = 0;
-    for (; i + 3 < count; i += 4) {
-        __m128 va = _mm_loadu_ps(&base[i]);
-        __m128 vb = _mm_loadu_ps(&scalar[i]);
-        __m128 vr = _mm_mul_ps(va, vb);
-        _mm_storeu_ps(&result[i], vr);
-    }
-    for (; i < count; ++i) {
-        result[i] = base[i] * scalar[i];
-    }
-}
-
-// ======================== 64-bit (SSE) Versions ========================
-inline void simd_sqrt64(const float* input, float* output, size_t count) {
-    size_t i = 0;
-    for (; i + 1 < count; i += 2) {
-        __m128 vin = _mm_setr_ps(input[i], input[i+1], 1.0f, 1.0f);
-        __m128 vout = _mm_sqrt_ps(vin);
-        _mm_storel_pi(reinterpret_cast<__m64*>(output + i), vout);
-    }
-    for (; i < count; ++i) {
-        output[i] = std::sqrt(input[i]);
-    }
-}
-
-inline void simd_divide64(const float* base, const float* divider, float* result, size_t count) {
-    size_t i = 0;
-    for (; i + 1 < count; i += 2) {
-        __m128 va = _mm_setr_ps(base[i], base[i+1], 1.0f, 1.0f);
-        __m128 vb = _mm_setr_ps(divider[i], divider[i+1], 1.0f, 1.0f);
-        __m128 vr = _mm_div_ps(va, vb);
-        _mm_storel_pi(reinterpret_cast<__m64*>(result + i), vr);
-    }
-    for (; i < count; ++i) {
-        result[i] = base[i] / divider[i];
-    }
-}
-
-inline __m128 log2_approx64(__m128 x) {
-    __m128i xi = _mm_castps_si128(x);
-    __m128 exp = _mm_cvtepi32_ps(_mm_srli_epi32(xi, 23));
-    exp = _mm_sub_ps(exp, _mm_set1_ps(127.0f));
-
-    xi = _mm_and_si128(xi, _mm_set1_epi32(0x007FFFFF));
-    xi = _mm_or_si128(xi, _mm_set1_epi32(0x3f800000));
-    __m128 mant = _mm_castsi128_ps(xi);
-
-    __m128 log_mant = _mm_sub_ps(mant, _mm_set1_ps(1.0f));
-    return _mm_add_ps(exp, log_mant);
-}
-
-inline __m128 exp2_approx64(__m128 x) {
-    __m128i int_part = _mm_cvttps_epi32(x);
-    __m128 frac = _mm_sub_ps(x, _mm_cvtepi32_ps(int_part));
-
-    int_part = _mm_add_epi32(int_part, _mm_set1_epi32(127));
-    int_part = _mm_slli_epi32(int_part, 23);
-    __m128 int_result = _mm_castsi128_ps(int_part);
-
-    __m128 frac_result = _mm_add_ps(_mm_set1_ps(1.0f), 
-                                    _mm_mul_ps(frac, _mm_set1_ps(0.69314718f)));
-    return _mm_mul_ps(int_result, frac_result);
-}
-
-inline void fast_pow_array64(const float* base, const float* exponent, float* out, size_t count) {
-    size_t i = 0;
-    for (; i + 1 < count; i += 2) {
-        __m128 vx = _mm_setr_ps(base[i], base[i+1], 1.0f, 1.0f);
-        __m128 vy = _mm_setr_ps(exponent[i], exponent[i+1], 1.0f, 1.0f);
-        __m128 logx = log2_approx64(vx);
-        __m128 prod = _mm_mul_ps(logx, vy);
-        __m128 result = exp2_approx64(prod);
-        _mm_storel_pi(reinterpret_cast<__m64*>(out + i), result);
-    }
-    for (; i < count; ++i) {
-        float logx = std::log2(base[i]);
-        out[i] = std::exp2(exponent[i] * logx);
-    }
-}
-
-inline void simd_multiply64(const float* base, const float* scalar, float* result, size_t count) {
-    size_t i = 0;
-    for (; i + 1 < count; i += 2) {
-        __m128 va = _mm_setr_ps(base[i], base[i+1], 1.0f, 1.0f);
-        __m128 vb = _mm_setr_ps(scalar[i], scalar[i+1], 1.0f, 1.0f);
-        __m128 vr = _mm_mul_ps(va, vb);
-        _mm_storel_pi(reinterpret_cast<__m64*>(result + i), vr);
-    }
-    for (; i < count; ++i) {
-        result[i] = base[i] * scalar[i];
-    }
-}
-
-// ======================== 256-bit (AVX2) Versions ========================
-#ifdef __AVX2__
-
-inline void simd_sqrt256(const float* input, float* output, size_t count) {
-    size_t i = 0;
-    for (; i + 7 < count; i += 8) {
-        __m256 vin = _mm256_loadu_ps(input + i);
-        __m256 vout = _mm256_sqrt_ps(vin);
-        _mm256_storeu_ps(output + i, vout);
-    }
-    for (; i < count; ++i) {
-        output[i] = std::sqrt(input[i]);
-    }
-}
-
-inline void simd_divide256(const float* base, const float* divider, float* result, size_t count) {
-    size_t i = 0;
-    for (; i + 7 < count; i += 8) {
-        __m256 va = _mm256_loadu_ps(base + i);
-        __m256 vb = _mm256_loadu_ps(divider + i);
-        __m256 vr = _mm256_div_ps(va, vb);
-        _mm256_storeu_ps(result + i, vr);
-    }
-    for (; i < count; ++i) {
-        result[i] = base[i] / divider[i];
-    }
-}
-
-inline __m256 log2_approx256(__m256 x) {
-    __m256i xi = _mm256_castps_si256(x);
-    __m256i exp_i = _mm256_srli_epi32(xi, 23);
-    __m256 exp = _mm256_cvtepi32_ps(exp_i);
-    exp = _mm256_sub_ps(exp, _mm256_set1_ps(127.0f));
-
-    xi = _mm256_and_si256(xi, _mm256_set1_epi32(0x007FFFFF));
-    xi = _mm256_or_si256(xi, _mm256_set1_epi32(0x3f800000));
-    __m256 mant = _mm256_castsi256_ps(xi);
-
-    __m256 log_mant = _mm256_sub_ps(mant, _mm256_set1_ps(1.0f));
-    return _mm256_add_ps(exp, log_mant);
-}
-
-inline __m256 exp2_approx256(__m256 x) {
-    __m256i int_part = _mm256_cvttps_epi32(x);
-    __m256 frac = _mm256_sub_ps(x, _mm256_cvtepi32_ps(int_part));
-
-    int_part = _mm256_add_epi32(int_part, _mm256_set1_epi32(127));
-    int_part = _mm256_slli_epi32(int_part, 23);
-    __m256 int_result = _mm256_castsi256_ps(int_part);
-
-    __m256 frac_result = _mm256_add_ps(_mm256_set1_ps(1.0f), 
-                                      _mm256_mul_ps(frac, _mm256_set1_ps(0.69314718f)));
-    return _mm256_mul_ps(int_result, frac_result);
-}
-
-inline void fast_pow_array256(const float* base, const float* exponent, float* out, size_t count) {
-    size_t i = 0;
-    for (; i + 7 < count; i += 8) {
-        __m256 vx = _mm256_loadu_ps(base + i);
-        __m256 vy = _mm256_loadu_ps(exponent + i);
-        __m256 logx = log2_approx256(vx);
-        __m256 prod = _mm256_mul_ps(logx, vy);
-        __m256 result = exp2_approx256(prod);
-        _mm256_storeu_ps(out + i, result);
-    }
-    for (; i < count; ++i) {
-        float logx = std::log2(base[i]);
-        out[i] = std::exp2(exponent[i] * logx);
-    }
-}
-
-inline void simd_multiply256(const float* base, const float* scalar, float* result, size_t count) {
-    size_t i = 0;
-    for (; i + 7 < count; i += 8) {
-        __m256 va = _mm256_loadu_ps(base + i);
-        __m256 vb = _mm256_loadu_ps(scalar + i);
-        __m256 vr = _mm256_mul_ps(va, vb);
-        _mm256_storeu_ps(result + i, vr);
-    }
-    for (; i < count; ++i) {
-        result[i] = base[i] * scalar[i];
-    }
-}
-
-#endif // __AVX2__
-#endif // SIMD_C
