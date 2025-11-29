@@ -3,7 +3,7 @@ A quick, fast, and portable way to use SIMD.
 
 ## Function
 DynAVX is a library that is designed with performance in mind. What it does?
-* DynAVX allows you to use scalars, SSE, AVX2, and AVX512 automatically
+* DynAVX allows you to use scalars, SSE, AVX2, and AVX512 through 1 function
 * You do not need to know the kind of SIMD the user has
 * It can be used in tandem with a [thread pool](https://github.com/billiuhm/superthread)
 * Works with GNUC (g++) or Clang
@@ -28,6 +28,29 @@ To implement it in your code; there is several functions.
 
 And for each, you must input 3 vectors; `inputA`, `inputB`, and `output`.
 Each vector must be the exact same size; so if `output` isn't the same size as `inputA` or `inputB`, use something along the lines of `output.resize(inputA.size)`.
+
+### Example
+```cpp
+#include <iostream>
+#include <vector>
+#include "simd.hpp"
+
+int main() {
+  simd calculator;
+  std::vector<int> a = {0, 1, 2, 3, 4, 5};
+  std::vector<int> b = {5, 4, 3, 2, 1, 0};
+  std::vector<int> c;
+
+  c.resize(a.size());
+  addi(a, b, c);
+
+  for (int element : c) {
+    std::cout << element << " "; 
+  }
+
+  return;
+}
+```
 
 ## To be fixed
 * Multiplying integers with SSE requires SSE 4.1
