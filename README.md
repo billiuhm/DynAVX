@@ -15,9 +15,12 @@ Then, once a function is called; like `addi`, meaning "add integer", will take 3
 The worst case scenario is 1 `switch` (3 cases + default) and an `if` statement of overhead while detecting SIMD type per-use.
 
 ## How to use
-DynAVX is simple to install; just put `simd.hpp` into your workspace and include it in your file. Unless you are excluding certain types; add `-msse -msse2 -msse3 -mssse3 -msse4 -mavx -mavx2 -mavx512f` to your compile command.
+DynAVX is simple to install; just put the folder called `simd` into your workspace; if you are updating `simd.cpp` you have to include the flags at the top of the file while turning it into an object file. Otherwise, if you are just using the library; include `simd.h` and make sure you compile `simd.o` with your other files (and put it after the file it is used in).
 
-To implement it in your code; there is several functions.
+And example compile command is: `g++ -o main.exe main.cpp extra.cpp simd/simd.o`
+Or for updating `simd.cpp`: `g++ -c -o simd/simd.o simd/simd.cpp -msse -msse2 -msse3 -mssse3 -msse4 -msse4 -mavx2 -mavx512f`
+
+To implement SIMD into your code; there are several functions to allow you to do that. Some functions are only available in certain forms.
 
 | Operation | int    | float  | double |
 |-----------|--------|--------|--------|
@@ -25,6 +28,7 @@ To implement it in your code; there is several functions.
 | subtract  | subi   | subf   | subd   |
 | multiply  | muli   | mulf   | muld   |
 | divide    | divi   | divf   | divd   |
+| dot       | x      | dotf   | x      |
 
 And for each, you must input 3 vectors; `inputA`, `inputB`, and `output`.
 Each vector must be the exact same size; so if `output` isn't the same size as `inputA` or `inputB`, use something along the lines of `output.resize(inputA.size)`.
@@ -33,7 +37,7 @@ Each vector must be the exact same size; so if `output` isn't the same size as `
 ```cpp
 #include <iostream>
 #include <vector>
-#include "simd.hpp"
+#include "simd.h"
 
 int main() {
   simd calculator;
